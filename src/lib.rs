@@ -114,27 +114,7 @@ fn run_creep(creep: &Creep, creep_targets: &mut HashMap<String, CreepTarget>) {
 
 fn run_creep_by_target(creep: &Creep, creep_target: &CreepTarget) -> bool {
     return match &creep_target {
-        CreepTarget::Upgrade(controller_id) => {
-            if creep.store().get_used_capacity(Some(ResourceType::Energy)) > 0 {
-                match controller_id.resolve() {
-                    Some(controller) => {
-                        let r = creep.upgrade_controller(&controller);
-                        if r == ReturnCode::NotInRange {
-                            creep.move_to(&controller);
-                            true
-                        } else if r != ReturnCode::Ok {
-                            warn!("couldn't upgrade: {:?}", r);
-                            false
-                        } else {
-                            true
-                        }
-                    }
-                    None => false,
-                }
-            } else {
-                false
-            }
-        }
+        CreepTarget::Upgrade(controller_id) => run_creep_upgrade(creep, controller_id),
         CreepTarget::Harvest(source_id) => {
             if creep.store().get_free_capacity(Some(ResourceType::Energy)) > 0 {
                 match source_id.resolve() {
@@ -158,5 +138,27 @@ fn run_creep_by_target(creep: &Creep, creep_target: &CreepTarget) -> bool {
                 false
             }
         }
+    };
+}
+
+fn run_creep_upgrade(creep: &Creep, controller_id: &ObjectId<StructureController>) -> bool {
+    if creep.store().get_used_capacity(Some(ResourceType::Energy)) <= 0 {
+        return false;
+    }
+
+    return match controller_id.resolve() {
+        Some(controller) => {
+            let r = creep.upgrade_controller(&controller);
+            if r == ReturnCode::NotInRange {
+                creep.move_to(&controller);
+                true
+            } else if r != ReturnCode::Ok {
+                warn!("couldn't upgrade: {:?}", r);
+                false
+            } else {
+                true
+            }
+        }
+        None => false,
     };
 }
