@@ -147,18 +147,17 @@ fn run_creep_upgrade(creep: &Creep, controller_id: &ObjectId<StructureController
     }
 
     return match controller_id.resolve() {
-        Some(controller) => {
-            let r = creep.upgrade_controller(&controller);
-            if r == ReturnCode::NotInRange {
+        Some(controller) => match creep.upgrade_controller(&controller) {
+            ReturnCode::Ok => true,
+            ReturnCode::NotInRange => {
                 creep.move_to(&controller);
                 true
-            } else if r != ReturnCode::Ok {
-                warn!("couldn't upgrade: {:?}", r);
-                false
-            } else {
-                true
             }
-        }
+            return_code => {
+                warn!("Couldn't upgrade: {:?}", return_code);
+                false
+            }
+        },
         None => false,
     };
 }
