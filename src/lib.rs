@@ -37,28 +37,7 @@ thread_local! {
 #[wasm_bindgen(js_name = loop)]
 pub fn game_loop() {
     debug!("loop starting! CPU: {}", game::cpu::get_used());
-    // mutably borrow the creep_targets refcell, which is holding our creep target locks
-    // in the wasm heap
-    CREEP_STATES.with(|creep_states_refcell| {
-        let mut creep_states = creep_states_refcell.borrow_mut();
-        debug!("running creeps");
-        // same type conversion (and type assumption) as the spawn loop
-        for creep in game::creeps().values() {
-            let creep_name = creep.name();
-            debug!("running creep {}", creep_name);
-
-            match creep_states.remove(&creep_name) {
-                Some(creep_state) => {
-                    let creep_state = run_creep(&creep, creep_state);
-                    creep_states.insert(creep_name, creep_state);
-                }
-                None => {
-                    creep_states.insert(creep_name, CreepState { target: None });
-                }
-            }
-        }
-    });
-
+    run_creeps();
     debug!("running spawns");
     // Game::spawns returns a `js_sys::Object`, which is a light reference to an
     // object of any kind which is held on the javascript heap.
@@ -92,6 +71,30 @@ pub fn game_loop() {
     }
 
     info!("done! cpu: {}", game::cpu::get_used())
+}
+
+fn run_creeps() {
+    // mutably borrow the creep_targets refcell, which is holding our creep target locks
+    // in the wasm heap
+    CREEP_STATES.with(|creep_states_refcell| {
+        let mut creep_states = creep_states_refcell.borrow_mut();
+        debug!("running creeps");
+        // same type conversion (and type assumption) as the spawn loop
+        for creep in game::creeps().values() {
+            let creep_name = creep.name();
+            debug!("running creep {}", creep_name);
+
+            match creep_states.remove(&creep_name) {
+                Some(creep_state) => {
+                    let creep_state = run_creep(&creep, creep_state);
+                    creep_states.insert(creep_name, creep_state);
+                }
+                None => {
+                    creep_states.insert(creep_name, CreepState { target: None });
+                }
+            }
+        }
+    });
 }
 
 fn run_creep(creep: &Creep, creep_state: CreepState) -> CreepState {
