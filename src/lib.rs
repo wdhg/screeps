@@ -16,17 +16,21 @@ pub fn setup() {
     logging::setup_logging(logging::Info);
 }
 
-// this is one way to persist data between ticks within Rust's memory, as opposed to
-// keeping state in memory on game objects - but will be lost on global resets!
-thread_local! {
-    static CREEP_TARGETS: RefCell<HashMap<String, CreepTarget>> = RefCell::new(HashMap::new());
-}
-
 // this enum will represent a creep's lock on a specific target object, storing a js reference to the object id so that we can grab a fresh reference to the object each successive tick, since screeps game objects become 'stale' and shouldn't be used beyond the tick they were fetched
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 enum CreepTarget {
     Upgrade(ObjectId<StructureController>),
     Harvest(ObjectId<Source>),
+}
+
+struct CreepState {
+    target: Option<CreepTarget>,
+}
+
+// this is one way to persist data between ticks within Rust's memory, as opposed to
+// keeping state in memory on game objects - but will be lost on global resets!
+thread_local! {
+    static CREEP_STATES: RefCell<HashMap<String, CreepState>> = RefCell::new(HashMap::new());
 }
 
 // to use a reserved name as a function name, use `js_name`:
@@ -35,12 +39,23 @@ pub fn game_loop() {
     debug!("loop starting! CPU: {}", game::cpu::get_used());
     // mutably borrow the creep_targets refcell, which is holding our creep target locks
     // in the wasm heap
-    CREEP_TARGETS.with(|creep_targets_refcell| {
-        let mut creep_targets = creep_targets_refcell.borrow_mut();
+    CREEP_STATES.with(|creep_states_refcell| {
+        let mut creep_states = creep_states_refcell.borrow_mut();
         debug!("running creeps");
         // same type conversion (and type assumption) as the spawn loop
         for creep in game::creeps().values() {
-            run_creep(&creep, &mut creep_targets);
+            let creep_name = creep.name();
+            debug!("running creep {}", creep_name);
+
+            match creep_states.remove(&creep_name) {
+                Some(creep_state) => {
+                    let creep_state = run_creep(&creep, creep_state);
+                    creep_states.insert(creep_name, creep_state);
+                }
+                None => {
+                    creep_states.insert(creep_name, CreepState { target: None });
+                }
+            }
         }
     });
 
@@ -79,26 +94,27 @@ pub fn game_loop() {
     info!("done! cpu: {}", game::cpu::get_used())
 }
 
-fn run_creep(creep: &Creep, creep_targets: &mut HashMap<String, CreepTarget>) {
+fn run_creep(creep: &Creep, creep_state: CreepState) -> CreepState {
     if creep.spawning() {
-        return;
+        return creep_state;
     }
-    let name = creep.name();
-    debug!("running creep {}", name);
 
-    match creep_targets.remove(&name) {
+    return match creep_state.target {
         Some(creep_target) => {
             let keep_target = run_creep_by_target(creep, &creep_target);
 
-            if keep_target {
-                creep_targets.insert(name, creep_target);
+            CreepState {
+                target: if keep_target {
+                    creep_state.target
+                } else {
+                    None
+                },
             }
         }
-        None => {
-            // no target, let's find one depending on if we have energy
-            creep_targets.insert(name, find_target(creep));
-        }
-    }
+        None => CreepState {
+            target: find_target(creep),
+        },
+    };
 }
 
 fn run_creep_by_target(creep: &Creep, creep_target: &CreepTarget) -> bool {
@@ -120,10 +136,7 @@ fn run_creep_upgrade(creep: &Creep, controller_id: &ObjectId<StructureController
                 creep.move_to(&controller);
                 true
             }
-            return_code => {
-                warn!("Couldn't upgrade: {:?}", return_code);
-                false
-            }
+            _ => false,
         },
         None => false,
     };
@@ -141,29 +154,26 @@ fn run_creep_harvest(creep: &Creep, source_id: &ObjectId<Source>) -> bool {
                 creep.move_to(&source);
                 true
             }
-            return_code => {
-                warn!("couldn't harvest: {:?}", return_code);
-                false
-            }
+            _ => false,
         },
         None => false,
     };
 }
 
-fn find_target(creep: &Creep) -> CreepTarget {
+fn find_target(creep: &Creep) -> Option<CreepTarget> {
     let room = creep.room().expect("couldn't resolve creep room");
 
     if creep.store().get_used_capacity(Some(ResourceType::Energy)) > 0 {
         for structure in room.find(find::STRUCTURES).iter() {
             // find a structure and upgrade it
             if let StructureObject::StructureController(controller) = structure {
-                return CreepTarget::Upgrade(controller.id());
+                return Some(CreepTarget::Upgrade(controller.id()));
             }
         }
     }
 
     return match room.find(find::SOURCES_ACTIVE).get(0) {
-        Some(source) => CreepTarget::Harvest(source.id()),
-        None => panic!(),
+        Some(source) => Some(CreepTarget::Harvest(source.id())),
+        None => None,
     };
 }
