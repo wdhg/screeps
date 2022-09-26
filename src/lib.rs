@@ -107,7 +107,7 @@ fn run_creep(creep: &Creep, creep_state: CreepState) -> CreepState {
                 target: if keep_target {
                     creep_state.target
                 } else {
-                    None
+                    find_target(creep)
                 },
             }
         }
