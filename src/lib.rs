@@ -115,29 +115,7 @@ fn run_creep(creep: &Creep, creep_targets: &mut HashMap<String, CreepTarget>) {
 fn run_creep_by_target(creep: &Creep, creep_target: &CreepTarget) -> bool {
     return match &creep_target {
         CreepTarget::Upgrade(controller_id) => run_creep_upgrade(creep, controller_id),
-        CreepTarget::Harvest(source_id) => {
-            if creep.store().get_free_capacity(Some(ResourceType::Energy)) > 0 {
-                match source_id.resolve() {
-                    Some(source) => {
-                        if creep.pos().is_near_to(source.pos()) {
-                            let r = creep.harvest(&source);
-                            if r != ReturnCode::Ok {
-                                warn!("couldn't harvest: {:?}", r);
-                                false
-                            } else {
-                                true
-                            }
-                        } else {
-                            creep.move_to(&source);
-                            true
-                        }
-                    }
-                    None => false,
-                }
-            } else {
-                false
-            }
-        }
+        CreepTarget::Harvest(source_id) => run_creep_harvest(creep, source_id),
     };
 }
 
@@ -155,6 +133,27 @@ fn run_creep_upgrade(creep: &Creep, controller_id: &ObjectId<StructureController
             }
             return_code => {
                 warn!("Couldn't upgrade: {:?}", return_code);
+                false
+            }
+        },
+        None => false,
+    };
+}
+
+fn run_creep_harvest(creep: &Creep, source_id: &ObjectId<Source>) -> bool {
+    if creep.store().get_free_capacity(Some(ResourceType::Energy)) <= 0 {
+        return false;
+    }
+
+    return match source_id.resolve() {
+        Some(source) => match creep.harvest(&source) {
+            ReturnCode::Ok => true,
+            ReturnCode::NotInRange => {
+                creep.move_to(&source);
+                true
+            }
+            return_code => {
+                warn!("couldn't harvest: {:?}", return_code);
                 false
             }
         },
