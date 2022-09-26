@@ -172,7 +172,7 @@ fn find_target(creep: &Creep) -> Option<CreepTarget> {
         }
     }
 
-    return match room.find(find::SOURCES_ACTIVE).get(0) {
+    return match room.find(find::SOURCES_ACTIVE).get(1) {
         Some(source) => Some(CreepTarget::Harvest(source.id())),
         None => None,
     };
