@@ -97,17 +97,7 @@ fn run_creep(creep: &Creep, creep_targets: &mut HashMap<String, CreepTarget>) {
         }
         None => {
             // no target, let's find one depending on if we have energy
-            let room = creep.room().expect("couldn't resolve creep room");
-            if creep.store().get_used_capacity(Some(ResourceType::Energy)) > 0 {
-                for structure in room.find(find::STRUCTURES).iter() {
-                    if let StructureObject::StructureController(controller) = structure {
-                        creep_targets.insert(name, CreepTarget::Upgrade(controller.id()));
-                        break;
-                    }
-                }
-            } else if let Some(source) = room.find(find::SOURCES_ACTIVE).get(0) {
-                creep_targets.insert(name, CreepTarget::Harvest(source.id()));
-            }
+            creep_targets.insert(name, find_target(creep));
         }
     }
 }
@@ -158,5 +148,23 @@ fn run_creep_harvest(creep: &Creep, source_id: &ObjectId<Source>) -> bool {
             }
         },
         None => false,
+    };
+}
+
+fn find_target(creep: &Creep) -> CreepTarget {
+    let room = creep.room().expect("couldn't resolve creep room");
+
+    if creep.store().get_used_capacity(Some(ResourceType::Energy)) > 0 {
+        for structure in room.find(find::STRUCTURES).iter() {
+            // find a structure and upgrade it
+            if let StructureObject::StructureController(controller) = structure {
+                return CreepTarget::Upgrade(controller.id());
+            }
+        }
+    }
+
+    return match room.find(find::SOURCES_ACTIVE).get(0) {
+        Some(source) => CreepTarget::Harvest(source.id()),
+        None => panic!(),
     };
 }
