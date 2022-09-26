@@ -10,6 +10,8 @@ use wasm_bindgen::prelude::*;
 
 mod logging;
 
+const TRANSFER_SPAWN_TICK_THRESHOLD: u32 = 200;
+
 // add wasm_bindgen to any function you would like to expose for call from js
 #[wasm_bindgen]
 pub fn setup() {
@@ -21,6 +23,7 @@ pub fn setup() {
 enum CreepTarget {
     Upgrade(ObjectId<StructureController>),
     Harvest(ObjectId<Source>),
+    TransferSpawn,
 }
 
 struct CreepState {
@@ -94,6 +97,7 @@ fn run_creep_by_target(creep: &Creep, creep_target: &CreepTarget) -> bool {
     return match &creep_target {
         CreepTarget::Upgrade(controller_id) => run_creep_upgrade(creep, controller_id),
         CreepTarget::Harvest(source_id) => run_creep_harvest(creep, source_id),
+        CreepTarget::TransferSpawn => run_creep_transfer_spawn(creep),
     };
 }
 
@@ -133,14 +137,43 @@ fn run_creep_harvest(creep: &Creep, source_id: &ObjectId<Source>) -> bool {
     };
 }
 
+fn run_creep_transfer_spawn(creep: &Creep) -> bool {
+    if creep.store().get_used_capacity(Some(ResourceType::Energy)) <= 0 {
+        return false;
+    }
+
+    let room = creep.room().expect("couldn't resolve creep room");
+
+    match room.find(find::MY_SPAWNS).get(0) {
+        Some(structure_spawn) => {
+            match creep.transfer(structure_spawn, ResourceType::Energy, None) {
+                ReturnCode::Ok => true,
+                ReturnCode::NotInRange => {
+                    creep.move_to(&structure_spawn);
+                    true
+                }
+                _ => false,
+            }
+        }
+        None => false,
+    }
+}
+
 fn find_target(creep: &Creep) -> Option<CreepTarget> {
     let room = creep.room().expect("couldn't resolve creep room");
 
     if creep.store().get_used_capacity(Some(ResourceType::Energy)) > 0 {
-        for structure in room.find(find::STRUCTURES).iter() {
-            // find a structure and upgrade it
-            if let StructureObject::StructureController(controller) = structure {
-                return Some(CreepTarget::Upgrade(controller.id()));
+        match creep.ticks_to_live() {
+            Some(ticks) if ticks < TRANSFER_SPAWN_TICK_THRESHOLD => {
+                return Some(CreepTarget::TransferSpawn);
+            }
+            _ => {
+                // find a structure and upgrade it
+                for structure in room.find(find::STRUCTURES).iter() {
+                    if let StructureObject::StructureController(controller) = structure {
+                        return Some(CreepTarget::Upgrade(controller.id()));
+                    }
+                }
             }
         }
     }
