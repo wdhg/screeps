@@ -86,8 +86,7 @@ fn run_creep(creep: &Creep, creep_targets: &mut HashMap<String, CreepTarget>) {
     let name = creep.name();
     debug!("running creep {}", name);
 
-    let target = creep_targets.remove(&name);
-    match target {
+    match creep_targets.remove(&name) {
         Some(creep_target) => {
             let keep_target = run_creep_by_target(creep, &creep_target);
 
