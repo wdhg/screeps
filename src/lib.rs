@@ -39,37 +39,7 @@ pub fn game_loop() {
     debug!("loop starting! CPU: {}", game::cpu::get_used());
     run_creeps();
     debug!("running spawns");
-    // Game::spawns returns a `js_sys::Object`, which is a light reference to an
-    // object of any kind which is held on the javascript heap.
-    //
-    // Object::values returns a `js_sys::Array`, which contains the member spawn objects
-    // representing all the spawns you control.
-    //
-    // They are returned as wasm_bindgen::JsValue references, which we can safely
-    // assume are StructureSpawn objects as returned from js without checking first
-    let mut additional = 0;
-    for spawn in game::spawns().values() {
-        debug!("running spawn {}", String::from(spawn.name()));
-
-        let body = [Part::Move, Part::Move, Part::Carry, Part::Work];
-        if spawn.room().unwrap().energy_available() >= body.iter().map(|p| p.cost()).sum() {
-            // create a unique name, spawn.
-            let name_base = game::time();
-            let name = format!("{}-{}", name_base, additional);
-            // note that this bot has a fatal flaw; spawning a creep
-            // creates Memory.creeps[creep_name] which will build up forever;
-            // these memory entries should be prevented (todo doc link on how) or cleaned up
-            let res = spawn.spawn_creep(&body, &name);
-
-            // todo once fixed in branch this should be ReturnCode::Ok instead of this i8 grumble grumble
-            if res != ReturnCode::Ok {
-                warn!("couldn't spawn: {:?}", res);
-            } else {
-                additional += 1;
-            }
-        }
-    }
-
+    spawn_creeps();
     info!("done! cpu: {}", game::cpu::get_used())
 }
 
@@ -179,4 +149,37 @@ fn find_target(creep: &Creep) -> Option<CreepTarget> {
         Some(source) => Some(CreepTarget::Harvest(source.id())),
         None => None,
     };
+}
+
+fn spawn_creeps() {
+    // Game::spawns returns a `js_sys::Object`, which is a light reference to an
+    // object of any kind which is held on the javascript heap.
+    //
+    // Object::values returns a `js_sys::Array`, which contains the member spawn objects
+    // representing all the spawns you control.
+    //
+    // They are returned as wasm_bindgen::JsValue references, which we can safely
+    // assume are StructureSpawn objects as returned from js without checking first
+    let mut additional = 0;
+    for spawn in game::spawns().values() {
+        debug!("running spawn {}", String::from(spawn.name()));
+
+        let body = [Part::Move, Part::Move, Part::Carry, Part::Work];
+        if spawn.room().unwrap().energy_available() >= body.iter().map(|p| p.cost()).sum() {
+            // create a unique name, spawn.
+            let name_base = game::time();
+            let name = format!("{}-{}", name_base, additional);
+            // note that this bot has a fatal flaw; spawning a creep
+            // creates Memory.creeps[creep_name] which will build up forever;
+            // these memory entries should be prevented (todo doc link on how) or cleaned up
+            let res = spawn.spawn_creep(&body, &name);
+
+            // todo once fixed in branch this should be ReturnCode::Ok instead of this i8 grumble grumble
+            if res != ReturnCode::Ok {
+                warn!("couldn't spawn: {:?}", res);
+            } else {
+                additional += 1;
+            }
+        }
+    }
 }
